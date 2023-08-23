@@ -17,6 +17,12 @@ def get_lst_dim(lst):
     return len(dim)
 
 
+def combine_lst(lst):
+    while(get_lst_dim(lst)) > 1:
+        lst = sum(lst, [])
+    return lst
+
+
 def compute_metrics(y_true, y_pred):
     y_true = tensor2lst(y_true)
     y_pred = tensor2lst(y_pred)
@@ -24,12 +30,9 @@ def compute_metrics(y_true, y_pred):
     dim_true = get_lst_dim(y_true)
     dim_pred = get_lst_dim(y_pred)
     
-    if dim_true == dim_pred == 1:
-        pass
-    
-    elif dim_true == dim_pred > 1:
-        y_true = sum(y_true, [])
-        y_pred = sum(y_pred, [])
+    if dim_true == dim_pred:
+        y_true = combine_lst(y_true)
+        y_pred = combine_lst(y_pred)
         
     else:
         assert 'list y_true and y_pred have different dimensions'
