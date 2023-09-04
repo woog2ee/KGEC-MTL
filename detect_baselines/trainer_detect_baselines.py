@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 def iteration(args, model, train_loader, valid_loader, optimizer, scheduler):
     model = model.to(args.device)
-    loss_fn = nn.CrossEntropyLoss().to(args.device)
+    loss_fn = nn.CrossEntropyLoss(ignore_index=-1).to(args.device)
     
     train_epoch_metrics, train_epoch_loss = [], []
     valid_epoch_metrics, valid_epoch_loss = [], []
@@ -32,18 +32,22 @@ def iteration(args, model, train_loader, valid_loader, optimizer, scheduler):
             optimizer.zero_grad()
             
             batch = {k: v.to(args.device) for k, v in batch.items()}
-            input_ids, label = batch['input_ids'], batch['label']
+            input_ids = batch['input_ids']
+            valid_length = batch['valid_length']
+            segment_ids = batch['segment_ids']
+            label = batch['label']
             # input_ids, label: [batch_size, max_tokens_per_sent]
 
-            out = model(input_ids)
+            out = model(input_ids, valid_length, segment_ids)
             # out: [batch_size, max_tokens_per_sent, 2]
-            
+    
             out, label = out.view(-1, 2), label.view(-1)
             # out: [batch_size * max_tokens_per_sent, 2]
             # label: [batch_size * max_tokens_per_sent]
             
             loss = loss_fn(out, label)
             train_loss += loss.item()
+            loss.backward()
             
             torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip)
             optimizer.step()
@@ -64,7 +68,7 @@ def iteration(args, model, train_loader, valid_loader, optimizer, scheduler):
                         'train_prec': train_prec / (idx+1),
                         'train_rec': train_rec / (idx+1),
                         'train_f1': train_f1 / (idx+1)}
-            if (idx+1) % 100 == 0:
+            if (idx+1) % 10 == 0:
                 train_iter.write(str(post_fix))
                 train_batch_metrics.append([train_acc / (idx+1), train_prec / (idx+1),\
                                             train_rec / (idx+1), train_f1 / (idx+1)])
