@@ -3,6 +3,36 @@ import torch.nn.functional as F
 from model_correct_baselines import generate_square_subsequent_mask
 
 
+def translate(args, model, tokenizer, sent):
+    model.eval()
+
+    src_ids = tokenizer.encode_src(sent)
+    src_ids = torch.LongTensor(src_ids).view(-1, 1).to(args.device)
+
+    num_tokens = src_ids.shape[0]
+    src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool).to(args.device)
+    encoded = model.encode(src_ids, src_mask)
+
+    tgt_ids = torch.ones(1, 1).fill_(tokenizer.sos_num).type(torch.long).to(args.device)
+    for i in range(int(len(sent)*1.5)):
+        encoded = encoded.to(args.device)
+        tgt_mask = (generate_square_subsequent_mask(tgt_ids.size(0), args.device).type(torch.bool)).to(args.device)
+
+        out = model.decode(tgt_ids, encoded, tgt_mask)
+        out = out.transpose(0, 1)
+        prob = model.linear(out[:, -1])
+        _, next_word = torch.max(prob, dim=1)
+        next_word = next_word.item()
+
+        tgt_ids = torch.cat([tgt_ids,
+                             torch.ones(1, 1).type_as(src_ids.data).fill_(next_word)], dim=0)
+        if next_word == tokenizer.eos_num: break
+    # tgt_ids: [int(len(sent)*1.5), 1]
+    tgt_ids = tgt_ids.squeeze(-1).tolist()
+    tgt_tokens = [tokenizer.decode_tgt(id) for id in tgt_ids]
+    return tgt_tokens
+
+
 def beam_search_decode(args, model, src, src_mask, max_len, beam_size, start_symbol):
     src = src.to(args.device)
     src_mask = src_mask.to(args.device)

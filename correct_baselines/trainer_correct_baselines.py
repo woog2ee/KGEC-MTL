@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 from model_correct_baselines import create_mask, generate_square_subsequent_mask
-from beam_search import beam_search_decode
+from beam_search import translate, beam_search_decode
+from metrics_correct import compute_correction_metrics_perlist
 from tqdm import tqdm
 
 
@@ -103,43 +104,9 @@ def save_model(model, epoch, save_path):
     print(f'===== Epoch {epoch+1} Model Saved at {save_path}_{epoch+1}.pt\n')
 
 
-def translate(args, model, tokenizer, sent):
-    model.eval()
-
-    src_ids = tokenizer.encode_src(sent)
-    src_ids = torch.LongTensor(src_ids).view(-1, 1).to(args.device)
-
-    num_tokens = src_ids.shape[0]
-    src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool).to(args.device)
-    encoded = model.encode(src_ids, src_mask)
-
-    tgt_ids = torch.ones(1, 1).fill_(tokenizer.sos_num).type(torch.long).to(args.device)
-    for i in range(int(len(sent)*1.5)):
-        encoded = encoded.to(args.device)
-        tgt_mask = (generate_square_subsequent_mask(tgt_ids.size(0), args.device).type(torch.bool)).to(args.device)
-
-        out = model.decode(tgt_ids, encoded, tgt_mask)
-        out = out.transpose(0, 1)
-        prob = model.linear(out[:, -1])
-        _, next_word = torch.max(prob, dim=1)
-        next_word = next_word.item()
-
-        tgt_ids = torch.cat([tgt_ids,
-                             torch.ones(1, 1).type_as(src_ids.data).fill_(next_word)], dim=0)
-        if next_word == tokenizer.eos_num: break
-    # tgt_ids: [int(len(sent)*1.5), 1]
-    print(f'tgt_ids: {tgt_ids}')
-    print(f'tgt_ids.shape: {tgt_ids.shape}')
-    tgt_ids = tgt_ids.squeeze(-1).tolist()
-    tgt_tokens = [tokenizer.decode_tgt(id) for id in tgt_ids]
-    print(f'tgt_tokens: {tgt_tokens}')
-    return tgt_tokens
-
-
 def predict_beam1(args, tokenizer, epoch, test_loader):
     # Test
     model = torch.load(args.save_path+f'_{epoch+1}.pt')
-    test_acc, test_prec, test_rec, test_f1, test_loss = 0.0, 0.0, 0.0, 0.0, 0.0
     print(f'========== For Testing, {args.save_path}_{epoch+1}.pt Loaded')
 
     test_iter = tqdm(enumerate(test_loader),
@@ -147,6 +114,7 @@ def predict_beam1(args, tokenizer, epoch, test_loader):
                      total=len(test_loader),
                      bar_format='{l_bar}{r_bar}')
 
+    tgts, pred_tgts = [], []
     model.eval()
     for idx, batch in test_iter:
         src, tgt = batch[0].T, batch[1].T
@@ -170,44 +138,15 @@ def predict_beam1(args, tokenizer, epoch, test_loader):
         print(f'origin_sent: {origin_sent}\n')
         print(f'predict_sent: {predict_sent}\n')
         exit()
-
-
-
-def predict_batch(args, tokenizer, epoch, test_loader):
-    # Test
-    model = torch.load(args.save_path+f'_{epoch+1}.pt')
-    test_acc, test_prec, test_rec, test_f1, test_loss = 0.0, 0.0, 0.0, 0.0, 0.0
-    print(f'========== For Testing, {args.save_path}_{epoch+1}.pt Loaded')
-
-    test_iter = tqdm(enumerate(test_loader),
-                     desc='Epoch_%s' % ('test'),
-                     total=len(test_loader),
-                     bar_format='{l_bar}{r_bar}')
-
-    model.eval()
-    for idx, batch in test_iter:
-        src, tgt = batch[0].T, batch[1].T
-        src_mask, tgt_mask, src_pad_mask, tgt_pad_mask = create_mask(src, tgt[:-1, :], args.device)
-        
-        out = model(src, tgt[:-1, :], src_mask, tgt_mask,
-                    src_pad_mask, tgt_pad_mask, src_pad_mask)
-        print(f'batch before tgt: {tgt.shape}')
-        print(f'batch before out: {out.shape}')
-
-        tgt = tgt[1:, :].reshape(-1)
-        out = out.reshape(-1, out.shape[-1])
-        print(f'batch tgt: {tgt.shape}')
-        print(f'batch out: {out.shape}')
-        exit()
-        #loss = loss_fn(out, tgt)
-        test_loss += loss.item()
-
+    
+    test_word_prec, test_word_rec, test_word_f1 = compute_correction_metrics_perlist(pred_tgts, tgts, 'word')
+    test_char_prec, test_char_rec, test_char_f1 = compute_correction_metrics_perlist(pred_tgts, tgts, 'char')
+    return [test_word_prec, test_word_rec, test_word_f1], [test_char_prec, test_char_rec, test_char_f1]
 
 
 def predict(args, tokenizer, epoch, test_dataset):
     # Test
     model = torch.load(args.save_path+f'_{epoch+1}.pt')
-    test_acc, test_prec, test_rec, test_f1 = 0.0, 0.0, 0.0, 0.0
     print(f'========== For Testing, {args.save_path}_{epoch+1}.pt Loaded')
 
     tgts, pred_tgts = [], []
@@ -216,27 +155,18 @@ def predict(args, tokenizer, epoch, test_dataset):
         src, tgt = test_dataset[idx][0], test_dataset[idx][1]
         src = tokenizer.decode_src(src)
         tgt = tokenizer.decode_tgt(tgt).split(' ')
-        tgts.append([tgt])
+        tgts.append(' '.join(tgt))
         print(f'src: {src}')
         print(f'tgt: {tgt}')
 
         pred_tgt = translate(args, model, tokenizer, src)
         pred_tgt = pred_tgt[1:-1]
-        pred_tgts.append(pred_tgt)
+        pred_tgts.append(' '.join(pred_tgt))
 
         print(f'{idx+1} / {len(test_dataset)}')
         print(f'answer: {tgt}')
         print(f'predict: {pred_tgt}\n')
-        
-        # compute_metrics KAGAS
-        acc, prec, rec, f1 = 1,2,3,4#compute_metrics(label, out)
-        test_acc += acc
-        test_prec += prec
-        test_rec += rec
-        test_f1 += f1
-
-    test_acc = test_acc / (idx+1)
-    test_prec = test_prec / (idx+1)
-    test_rec = test_rec / (idx+1)
-    test_f1 = test_f1 / (idx+1)
-    return [test_acc, test_prec, test_rec, test_f1]
+    
+    test_word_prec, test_word_rec, test_word_f1 = compute_correction_metrics_perlist(pred_tgts, tgts, 'word')
+    test_char_prec, test_char_rec, test_char_f1 = compute_correction_metrics_perlist(pred_tgts, tgts, 'char')
+    return [test_word_prec, test_word_rec, test_word_f1], [test_char_prec, test_char_rec, test_char_f1]
