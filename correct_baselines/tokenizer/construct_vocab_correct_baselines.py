@@ -6,23 +6,23 @@ from tqdm import tqdm
 
 
 def json2txt(args):
-    json_path = os.path.join(args.data_path, args.data_name+'.json')
-    txt_path = os.path.join(args.data_path, args.data_name+args.vocab_with+'.txt')
+    json_path = args.data_path+'.json'
+    txt_path = args.data_path+'_'+args.vocab_with+'.txt'
     
     with open(json_path, 'r') as json_f, open(txt_path, 'w') as txt_f:
         dataset = json.load(json_f)
         
         for item in tqdm(dataset):
-            assert len(item) == 3  # item is consists of [src, tgt, difficulty]
+            assert len(item) == 2  # item is consists of [tgt, src] ([origin, noised])
 
             if args.vocab_with == 'src':
-                txt_f.write(item[0] + '\n')
-            elif args.vocab_with == 'tgt':
                 txt_f.write(item[1] + '\n')
+            elif args.vocab_with == 'tgt':
+                txt_f.write(item[0] + '\n')
             elif args.vocab_with == 'both':
-                txt_f.write(item[0] + '\n' + item[1] + '\n')
+                txt_f.write(item[1] + '\n' + item[0] + '\n')
             else:
-                raise Exception('wrong --vocab_with argument detected')
+                raise Exception('wrong vocab_with argument passed')
     return True
 
 
@@ -31,7 +31,7 @@ def construct_sp_vocab(args):
                  --model_prefix={} --vocab_size={} --character_coverage={} --model_type={}\
                  --bos_id=0 --eos_id=1 --pad_id=2 --unk_id=3\
                  --bos_piece=<s> --eos_piece=</s> --pad_piece=<pad> --unk_piece=<unk>'
-    txt_path = os.path.join(args.data_path, args.data_name+args.vocab_with+'.txt')
+    txt_path = args.data_path+'_'+args.vocab_with+'.txt'
 
     # File naming with bpe_src.vocab, bpe_tgt.vocab, char_src.vocab, char_tgt.vocab
     cmd = templates.format(txt_path, args.prefix+args.model_type+f'_{args.vocab_with}',
@@ -42,8 +42,9 @@ def construct_sp_vocab(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     
-    parser.add_argument('--data_path', type=str, default='/HDD/seunguk/KGEC')
-    parser.add_argument('--data_name', type=str, default='total_resorted_29_test')
+    # 현재는 0907 데이터로 vocab 만들어둔 것
+    parser.add_argument('--data_path', type=str, default='/HDD/seunguk/KGECdataset/kgec_kowiki_0907train')
+    parser.add_argument('--data_name', type=str, default='')
     parser.add_argument('--vocab_with', type=str, choices=['src', 'tgt', 'both'])
     
     parser.add_argument('--prefix', type=str, default='/home/seunguk/KGEC/0821/correct_baselines/tokenizer/')
@@ -54,13 +55,13 @@ if __name__ == '__main__':
     args = parser.parse_args([])
     
     # Change options
-    args.vocab_with = 'tgt'
-    args.char_coverage = 0.9999
+    args.vocab_with = 'src'
+    args.char_coverage = 0.9999  # char: 1
     args.model_type = 'bpe'
     
 
     # Convert json file to text file
-    txt_path = os.path.join(args.data_path, args.data_name+args.vocab_with+'.txt')
+    txt_path = args.data_path+'_'+args.vocab_with+'.txt'
     if os.path.exists(txt_path):
         os.remove(txt_path)
 
@@ -69,7 +70,7 @@ if __name__ == '__main__':
         
 
     # Make vocabulary
-    vocab_path = os.path.join(args.prefix, args.model_type+f'_{args.vocab_with}')
+    vocab_path = args.prefix+args.model_type+f'_{args.vocab_with}'
     if os.path.exists(vocab_path+'.model'):
         os.remove(vocab_path+'.model')
         os.remove(vocab_path+'.vocab')
