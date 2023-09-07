@@ -33,13 +33,13 @@ if __name__ == '__main__':
     parser.add_argument('--freeze_layers', type=int)
     parser.add_argument('--batch_size', type=int)
     parser.add_argument('--hidden_size', type=int, default=768)
-    parser.add_argument('--dropout', type=float, default=0.2)
+    parser.add_argument('--dropout', type=float, default=0.1)
     
-    parser.add_argument('--lr', type=float, default=1e-4)
+    parser.add_argument('--lr', type=float, default=5e-5)
     parser.add_argument('--beta1', type=float, default=0.9)
     parser.add_argument('--beta2', type=float, default=0.98)
     parser.add_argument('--eps', type=float, default=1e-9)
-    parser.add_argument('--warmup_ratio', type=float, default=0.2)
+    parser.add_argument('--warmup_ratio', type=float, default=0.1)
     parser.add_argument('--clip', type=int, default=5)
     
     parser.add_argument('--epochs', type=int)
@@ -73,17 +73,13 @@ if __name__ == '__main__':
     if args.curriculum:
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
                                   sampler=SequentialSampler(train_dataset), num_workers=args.num_workers)
-        valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size,
-                                  sampler=SequentialSampler(valid_dataset), num_workers=args.num_workers)
-        test_loader = DataLoader(test_dataset, batch_size=args.batch_size,
-                                 sampler=SequentialSampler(test_dataset), num_workers=args.num_workers)
     else:
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
                                   sampler=RandomSampler(train_dataset), num_workers=args.num_workers)
-        valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size,
-                                  sampler=RandomSampler(valid_dataset), num_workers=args.num_workers)
-        test_loader = DataLoader(test_dataset, batch_size=args.batch_size,
-                                 sampler=RandomSampler(test_dataset),num_workers=args.num_workers)
+    valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size,
+                                sampler=RandomSampler(valid_dataset), num_workers=args.num_workers)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size,
+                                sampler=RandomSampler(test_dataset),num_workers=args.num_workers)
         
     
     print('========== Setting Optimizer & Scheduler\n')
