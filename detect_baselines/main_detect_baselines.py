@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import DataLoader, RandomSampler
+from torch.utils.data import DataLoader, SequentialSampler, RandomSampler
 from utils import (str2bool,
                    init_seed,
                    load_json_data,
@@ -20,7 +20,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--device', type=str,
                         default=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
-    parser.add_argument('--data_path', type=str, default='/HDD/seunguk/KGECdataset/kgec_kowiki_')
+    parser.add_argument('--data_path', type=str, default='/HDD/seunguk/KGECdataset/kgec_kowiki_0907')
     parser.add_argument('--model_path', type=str,
                         choices=['monologg/kobert', 'monologg/koelectra-base-discriminator',
                                  'beomi/kcbert-base', 'beomi/KcELECTRA-base-v2022'])
@@ -30,16 +30,17 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=5)
     
     parser.add_argument('--max_tokens_per_sent', type=int, default=256)
+    parser.add_argument('--freeze_layers', type=int)
     parser.add_argument('--batch_size', type=int)
     parser.add_argument('--hidden_size', type=int, default=768)
     parser.add_argument('--dropout', type=float, default=0.2)
     
-    parser.add_argument('--lr', type=float, default=1e-5)
+    parser.add_argument('--lr', type=float, default=1e-4)
     parser.add_argument('--beta1', type=float, default=0.9)
     parser.add_argument('--beta2', type=float, default=0.98)
     parser.add_argument('--eps', type=float, default=1e-9)
-    parser.add_argument('--warmup_ratio', type=float, default=0.1)
-    parser.add_argument('--clip', type=int, default=1)
+    parser.add_argument('--warmup_ratio', type=float, default=0.2)
+    parser.add_argument('--clip', type=int, default=5)
     
     parser.add_argument('--epochs', type=int)
     parser.add_argument('--curriculum', type=str2bool, default='false')
@@ -67,11 +68,15 @@ if __name__ == '__main__':
     train_dataset = BERTDataset(args, train_data, tokenizer)
     valid_dataset = BERTDataset(args, valid_data, tokenizer)
     test_dataset = BERTDataset(args, test_data, tokenizer)
+    print(f'========== with Dataset {len(train_dataset)}:{len(valid_dataset)}:{len(test_dataset)}')
     
     if args.curriculum:
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.num_workers)
-        valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size, num_workers=args.num_workers)
-        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, num_workers=args.num_workers)
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
+                                  sampler=SequentialSampler(train_dataset), num_workers=args.num_workers)
+        valid_loader = DataLoader(valid_dataset, batch_size=args.batch_size,
+                                  sampler=SequentialSampler(valid_dataset), num_workers=args.num_workers)
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size,
+                                 sampler=SequentialSampler(test_dataset), num_workers=args.num_workers)
     else:
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size,
                                   sampler=RandomSampler(train_dataset), num_workers=args.num_workers)
@@ -90,7 +95,7 @@ if __name__ == '__main__':
     
     print('========== Training & Testing Start\n')
     train_epoch_metrics, train_epoch_loss, valid_epoch_metrics, valid_epoch_loss,\
-        train_batch_metrics, train_batch_loss, valid_batch_metrics, valid_batch_loss = iteration(args, detector, train_loader, test_loader, optimizer, scheduler)
+        train_batch_metrics, train_batch_loss, valid_batch_metrics, valid_batch_loss = iteration(args, detector, train_loader, valid_loader, optimizer, scheduler)
     
     best_epoch = valid_epoch_loss.index(min(valid_epoch_loss))
     test_metrics = predict(args, best_epoch, test_loader)

@@ -7,10 +7,23 @@ class BERTDetector(nn.Module):
         super().__init__()
         
         self.bert = bert
-        for param in self.bert.parameters():
-           param.requires_grad = False
+        if args.freeze_layers == 0:
+            pass
+        else:
+            bert_layers = ['embeddings.', 'encoder.layer.0.', 'encoder.layer.1.',
+                           'encoder.layer.2.', 'encoder.layer.3.', 'encoder.layer.4.',
+                           'encoder.layer.5.', 'encoder.layer.6.', 'encoder.layer.7.',
+                           'encoder.layer.8.', 'encoder.layer.9.', 'encoder.layer.10.',
+                           'encoder.layer.11.']
+
+            for name, param in self.bert.named_parameters():
+                if 'embeddings.' in name:
+                    param.requires_grad = False
+                elif any(bert_layer in name
+                        for bert_layer in bert_layers[:args.freeze_layers+1]):
+                    param.requires_grad = False
+
         self.dropout = nn.Dropout(args.dropout)
-        
         self.linear = nn.Linear(args.hidden_size, 2)
 
 
