@@ -29,7 +29,12 @@ def load_json_data(data_path):
 
 
 def get_optimizer_and_scheduler(model, lr, beta1, beta2, eps, warmup_steps, t_total):
-    # For training Transformer
-    optimizer = Adam(model.parameters(), lr=lr, betas=(beta1, beta2), eps=eps)
+    no_decay = ['bias', 'LayerNorm.weight']
+    optimizer_grouped_parameters = [
+        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
+        {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+    ]
+    
+    optimizer = Adam(optimizer_grouped_parameters, lr=lr, betas=(beta1, beta2), eps=eps)
     scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=warmup_steps, num_training_steps=t_total)
     return optimizer, scheduler

@@ -13,8 +13,8 @@ class SPTokenizer:
         
     def init_tokenizer(self, tokenizer_dir):
         tokenizer = spm.SentencePieceProcessor(tokenizer_dir)
-        tokenizer.SetEncodeExtraOptions('bos:eos')
-        return tokenizer   
+        #tokenizer.SetEncodeExtraOptions('bos:eos')
+        return tokenizer
     
     def encode_src(self, sent):
         return self.src_tokenizer.EncodeAsIds(sent)

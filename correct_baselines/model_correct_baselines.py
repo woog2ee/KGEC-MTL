@@ -49,11 +49,13 @@ class TransformerCorrector(nn.Module):
                                        num_encoder_layers=args.n_enc_layers,
                                        num_decoder_layers=args.n_dec_layers,
                                        dim_feedforward=args.pf_dim,
-                                       dropout=args.dropout)
+                                       dropout=args.dropout,
+                                       batch_first=True)
         self.linear = nn.Linear(args.hidden_size, args.vocab_size)
         
     def forward(self, src, tgt, src_mask, tgt_mask,
                 src_pad_mask, tgt_pad_mask, memory_key_pad_mask):
+        
         src_emb = self.src_token_embedding(src)
         src_emb = self.pos_embedding(src_emb)
         
@@ -82,16 +84,20 @@ def generate_square_subsequent_mask(size, device):
     return mask
 
 
-def create_mask(src, tgt, device):
-    src_seq_len = src.shape[0]
-    src_mask    = torch.zeros((src_seq_len, src_seq_len), device=device).type(torch.bool)
+def create_mask(src, tgt, args):
+    assert src.shape[1] == args.max_tokens_per_sent
+    assert tgt.shape[1] == args.max_tokens_per_sent
 
-    tgt_seq_len = tgt.shape[0]
-    tgt_mask    = generate_square_subsequent_mask(tgt_seq_len, device)
+    src_seq_len = src.shape[1]
+    src_mask    = torch.zeros((src_seq_len, src_seq_len), device=args.device).type(torch.bool)
 
-    pad_idx = 3  # Preprocessor's pad_token_id
-    src_padding_mask = (src == pad_idx).transpose(0, 1)
-    tgt_padding_mask = (tgt == pad_idx).transpose(0, 1)
+    tgt_seq_len = tgt.shape[1]
+    tgt_mask    = generate_square_subsequent_mask(tgt_seq_len, args.device)
+
+    pad_idx = 2
+
+    src_padding_mask = (src == pad_idx)
+    tgt_padding_mask = (tgt == pad_idx)
     return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask
 
 

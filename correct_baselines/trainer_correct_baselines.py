@@ -33,14 +33,16 @@ def iteration(args, model, pad_num, train_loader, valid_loader, optimizer, sched
         model.train()
         for idx, batch in train_iter:
             optimizer.zero_grad()
+
+            batch = {k: v.to(args.device) for k, v in batch.items()}
+            src, tgt = batch['src'], batch['tgt']
+            # src, tgt: [batch_size, max_length] [64, 256]
+
+            src_mask, tgt_mask, src_pad_mask, tgt_pad_mask = create_mask(src, tgt, args)
+
+            out = model(src, tgt, src_mask, tgt_mask, src_pad_mask, tgt_pad_mask, src_pad_mask)
             
-            src, tgt = batch[0].T, batch[1].T
-            src_mask, tgt_mask, src_pad_mask, tgt_pad_mask = create_mask(src, tgt[:-1, :], args.device)
-            
-            out = model(src, tgt[:-1, :], src_mask, tgt_mask,
-                        src_pad_mask, tgt_pad_mask, src_pad_mask)
-            
-            tgt = tgt[1:, :].reshape(-1)
+            tgt = tgt.reshape(-1)
             out = out.reshape(-1, out.shape[-1])
             
             loss = loss_fn(out, tgt)
@@ -69,13 +71,15 @@ def iteration(args, model, pad_num, train_loader, valid_loader, optimizer, sched
             
         model.eval()
         for idx, batch in valid_iter:
-            src, tgt = batch[0].T, batch[1].T
-            src_mask, tgt_mask, src_pad_mask, tgt_pad_mask = create_mask(src, tgt[:-1, :], args.device)
+            batch = {k: v.to(args.device) for k, v in batch.items()}
+            src, tgt = batch['src'], batch['tgt']
+            # src, tgt: [batch_size, max_length] [64, 256]
+
+            src_mask, tgt_mask, src_pad_mask, tgt_pad_mask = create_mask(src, tgt, args)
             
-            out = model(src, tgt[:-1, :], src_mask, tgt_mask,
-                        src_pad_mask, tgt_pad_mask, src_pad_mask)
+            out = model(src, tgt, src_mask, tgt_mask, src_pad_mask, tgt_pad_mask, src_pad_mask)
             
-            tgt = tgt[1:, :].reshape(-1)
+            tgt = tgt.reshape(-1)
             out = out.reshape(-1, out.shape[-1])
             
             loss = loss_fn(out, tgt)
@@ -117,9 +121,9 @@ def predict_beam1(args, tokenizer, epoch, test_loader):
     tgts, pred_tgts = [], []
     model.eval()
     for idx, batch in test_iter:
-        src, tgt = batch[0].T, batch[1].T
+        src, tgt = batch[0], batch[1]  # [batch, max_len]
 
-        num_tokens = src.shape[0]
+        num_tokens = src.shape[1]
         src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
 
         tgt_tokens = beam_search_decode(args, model, src, src_mask,
@@ -153,20 +157,25 @@ def predict(args, tokenizer, epoch, test_dataset):
     model.eval()
     for idx in tqdm(range(len(test_dataset))):
         src, tgt = test_dataset[idx][0], test_dataset[idx][1]
+        print(f'src: {src}')
+        print(f'tgt: {tgt}\n')
+
         src = tokenizer.decode_src(src)
         tgt = tokenizer.decode_tgt(tgt).split(' ')
         tgts.append(' '.join(tgt))
         print(f'src: {src}')
-        print(f'tgt: {tgt}')
+        print(f'tgt: {tgt}\n')
 
         pred_tgt = translate(args, model, tokenizer, src)
         pred_tgt = pred_tgt[1:-1]
         pred_tgts.append(' '.join(pred_tgt))
 
+        #if (idx+1) % 100 == 0:
         print(f'{idx+1} / {len(test_dataset)}')
         print(f'answer: {tgt}')
         print(f'predict: {pred_tgt}\n')
-    
+        exit()
+
     test_word_prec, test_word_rec, test_word_f1 = compute_correction_metrics_perlist(pred_tgts, tgts, 'word')
     test_char_prec, test_char_rec, test_char_f1 = compute_correction_metrics_perlist(pred_tgts, tgts, 'char')
     return [test_word_prec, test_word_rec, test_word_f1], [test_char_prec, test_char_rec, test_char_f1]
