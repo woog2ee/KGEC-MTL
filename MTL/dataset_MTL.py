@@ -1,5 +1,7 @@
 import torch
 from torch.utils.data import Dataset
+from tqdm import tqdm
+from operator import itemgetter
 
 
 class MTLDataset(Dataset):
@@ -11,6 +13,7 @@ class MTLDataset(Dataset):
 
         self.with_pretrained = args.with_pretrained
         self.max_tokens_per_sent = args.max_tokens_per_sent
+        #self.dataset = self.build_dataset()
         
         
     def tokenize(self, sent, padding=True):
@@ -52,21 +55,33 @@ class MTLDataset(Dataset):
         return each_word_token_lengths
                                         
         
+    # def build_dataset(self):
+    #     if self.with_pretrained:
+    #         dataset = [[torch.tensor(self.tokenize(src)['input_ids']),
+    #                     torch.tensor(self.tokenize(tgt)['input_ids']),
+    #                     torch.tensor(self.get_token_level_labels(src, tgt, padding=True))]
+    #                     for src, tgt in tqdm(zip(self.src_lst, self.tgt_lst), total=len(self.src_lst))]
+    #     else:
+    #         dataset = []
+    #     return dataset
+
     def __len__(self):
         return len(self.dataset)
-    
-    
+
     def __getitem__(self, idx):
         noised, origin = self.dataset[idx][0], self.dataset[idx][1]
-                                        
-        if self.with_pretrained:
-            src = self.tokenize(noised)['input_ids']
-            tgt = self.tokenize(origin)['input_ids']
-        else:
-            src = self.tokenizer.encode_src(src)
-            tgt = self.tokenizer.encode_tgt(tgt) # 패딩 필요
 
+        src = self.tokenizer(noised,
+                             padding='max_length',
+                             truncation=True,
+                             max_length=self.max_tokens_per_sent,
+                             add_special_tokens=False)['input_ids']
         label = self.get_token_level_labels(noised, origin, padding=True)
-        
+        tgt = self.tokenizer(origin,
+                             padding='max_length',
+                             truncation=True,
+                             max_length=self.max_tokens_per_sent,
+                             add_special_tokens=True)['input_ids']
+
         output = {'src': src, 'label': label, 'tgt': tgt}
         return {k: torch.tensor(v) for k, v in output.items()}

@@ -36,10 +36,9 @@ def iteration(args, model, pad_num, train_loader, valid_loader, optimizer, sched
         model.train()
         for idx, batch in train_iter:
             optimizer.zero_grad()
+
             batch = {k: v.to(args.device) for k, v in batch.items()}
-            src = batch['src']
-            label = batch['label']
-            tgt = batch['tgt']
+            src, label, tgt = batch['src'], batch['label'], batch['tgt']
             # src, tgt: [batch_size, max_length] [64, 256]
 
             # detect & correct 
@@ -89,9 +88,7 @@ def iteration(args, model, pad_num, train_loader, valid_loader, optimizer, sched
         model.eval()
         for idx, batch in valid_iter:
             batch = {k: v.to(args.device) for k, v in batch.items()}
-            src = batch['src']
-            label = batch['label']
-            tgt = batch['tgt']
+            src, label, tgt = batch['src'], batch['label'], batch['tgt']
             
             # detect & correct 
             src_mask, tgt_mask, src_pad_mask, tgt_pad_mask = create_mask(src, tgt, args)
@@ -150,9 +147,7 @@ def predict_detection(args, epoch, test_loader):
     model.eval()
     for idx, batch in test_iter:    
         batch = {k: v.to(args.device) for k, v in batch.items()}
-        src = batch['src']
-        label = batch['label']
-        #tgt = batch['tgt']
+        src, label, tgt = batch['src'], batch['label'], batch['tgt']
 
         # detect
         out1 = model(src, None, None, None, None, None, inference='detect')
@@ -200,6 +195,61 @@ def predict_correction(args, tokenizer, epoch, test_dataset):
         print(f'{idx+1} / {len(test_dataset)}')
         print(f'answer: {tgt}')
         print(f'predict: {pred_tgt}\n')
+    
+    test_word_prec, test_word_rec, test_word_f1 = compute_correction_metrics_perlist(pred_tgts, tgts, 'word')
+    test_char_prec, test_char_rec, test_char_f1 = compute_correction_metrics_perlist(pred_tgts, tgts, 'char')
+    return [test_word_prec, test_word_rec, test_word_f1], [test_char_prec, test_char_rec, test_char_f1]
+
+def predict_beam1(args, tokenizer, epoch, test_loader):
+    # Test
+    model = torch.load(args.save_path+f'_{epoch+1}.pt')
+    print(f'========== For Testing, {args.save_path}_{epoch+1}.pt Loaded')
+
+    test_iter = tqdm(enumerate(test_loader),
+                     desc='Epoch_%s' % ('test'),
+                     total=len(test_loader),
+                     bar_format='{l_bar}{r_bar}')
+
+    tgts, pred_tgts = [], []
+    model.eval()
+
+    with torch.no_grad():
+        for idx, batch in test_iter:
+            batch = {k: v.to(args.device) for k, v in batch.items()}
+            src, label, tgt = batch['src'], batch['label'], batch['tgt']  # 32, 64
+            print(f'### test src, tgt: {src.shape} {tgt.shape}')
+
+            num_tokens = src.shape[1]
+            src_mask = (torch.zeros(num_tokens, num_tokens)).type(torch.bool)
+            print(f'### test src_mask: {src_mask.shape}')
+
+            #sos_num = tokenizer.sos_num
+            sos_num = tokenizer('[CLS]', add_special_tokens=False)['input_ids'][0]
+            eos_num = tokenizer('[SEP]', add_special_tokens=False)['input_ids'][0]
+
+            pred_tokens = beam_search_decode(args, model, src, src_mask,
+                                            max_len=int(num_tokens * 1.5),
+                                            beam_size=args.beam_size,
+                                            start_symbol=sos_num,
+                                            end_symbol=eos_num)
+            pred_tokens = pred_tokens.tolist()
+
+            src_tokens = src.squeeze(0).tolist()
+            tgt_tokens = tgt.squeeze(0).tolist()
+            print('\n\n\n')
+        
+
+            print(f'\n#### src_tokens: {src_tokens}')
+            print(f'#### tgt_tokens: {tgt_tokens}\n')
+            print(f'#### pred_tokens: {pred_tokens}\n')
+
+            src_sent = tokenizer.decode(src_tokens)
+            tgt_sent = tokenizer.decode(tgt_tokens)
+            pred_sent = tokenizer.decode(pred_tokens)
+            print(f'beam1 src: {src_sent}')
+            print(f'beam1 tgt: {tgt_sent}\n')
+            print(f'beam1 pred: {pred_sent}\n')
+            exit()
     
     test_word_prec, test_word_rec, test_word_f1 = compute_correction_metrics_perlist(pred_tgts, tgts, 'word')
     test_char_prec, test_char_rec, test_char_f1 = compute_correction_metrics_perlist(pred_tgts, tgts, 'char')

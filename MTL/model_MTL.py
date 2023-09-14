@@ -38,9 +38,10 @@ class PositionalEmbedding(nn.Module):
 
 
 class MultiTaskLearner(nn.Module):
-    def __init__(self, args, bert):
+    def __init__(self, args, bert, pad_num):
         super().__init__()
 
+        self.pad_num = pad_num
         self.with_pretrained = args.with_pretrained
 
         # Token Embedding Layers for Shared Layers (with First-Initialized Transformer Encoder)
@@ -97,18 +98,17 @@ class MultiTaskLearner(nn.Module):
         self.correct_linear = nn.Linear(args.hidden_size, args.vocab_size)
 
 
-    def get_attn_mask(self, token_ids, valid_length):
-        attn_mask = torch.zeros_like(token_ids)
-        for i, v in enumerate(valid_length):
-            attn_mask[i][:v] = 1
-        return attn_mask.float()
+    def get_attn_mask(self, input_ids):
+        return torch.where(input_ids == self.pad_num, torch.tensor(0), torch.tensor(1))
         
         
     def forward(self, src, tgt, src_mask, tgt_mask, src_pad_mask, tgt_pad_mask,
                 inference=None):
         # Shared Layers for Text Representations
         if self.with_pretrained:
-            src_emb = self.shared_layers(src).last_hidden_state
+            attention_mask = self.get_attn_mask(src)
+            src_emb = self.shared_layers(input_ids=src,
+                                         attention_mask=attention_mask).last_hidden_state
             # src_emb: [batch_size, max_length, hidden_size] [64, 256, 768]
         else:
             src_emb = self.src_token_embedding(src)
@@ -118,8 +118,9 @@ class MultiTaskLearner(nn.Module):
         
 
         # Task-Specific Layer for Detection
+        out1 = self.detect_linear(src_emb)
         if inference == None:
-            out1 = self.detect_linear(src_emb)
+            pass
         if inference == 'detect':
             return torch.sigmoid(out1)
         if inference == 'correct':
@@ -144,7 +145,10 @@ class MultiTaskLearner(nn.Module):
         out2 = self.correct_linear(out2)
         # out2: [batch_size, max_length, vocab_size] [64, 256, 30000]
         
-        return torch.sigmoid(out1), out2
+        if inference == None:
+            return torch.sigmoid(out1), out2
+        elif inference == 'correct':
+            return out2
     
     
     def encode(self, src):

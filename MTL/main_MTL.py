@@ -23,7 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataparallel', type=str2bool, default='false')
     parser.add_argument('--device', type=str,
                         default=torch.device('cuda' if torch.cuda.is_available() else 'cpu'))
-    parser.add_argument('--data_path', type=str, default='/HDD/seunguk/KGECdataset/kgec_kowiki_')
+    parser.add_argument('--data_path', type=str, default='/HDD/seunguk/KGECdataset/kgec_kowiki_0907')
     parser.add_argument('--model_path', type=str, choices=['monologg/kobert', 'beomi/kcbert-base'])
     parser.add_argument('--with_pretrained', type=str2bool, default='true')
     
@@ -32,12 +32,15 @@ if __name__ == '__main__':
     parser.add_argument('--vocab_with', type=str, choices=['bpe', 'char'])
     parser.add_argument('--save_path', type=str)
     
-    parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--num_workers', type=int, default=10)
-    
-    parser.add_argument('--max_tokens_per_sent', type=int, default=256)
     parser.add_argument('--freeze_layers', type=int)
     parser.add_argument('--batch_size', type=int)
+    parser.add_argument('--epochs', type=int)
+    parser.add_argument('--curriculum', type=str2bool, default='false')
+    parser.add_argument('--test', type=str2bool, default='false')
+
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--num_workers', type=int, default=10)
+    parser.add_argument('--max_tokens_per_sent', type=int, default=64)
     parser.add_argument('--hidden_size', type=int, default=768)
     parser.add_argument('--n_heads', type=int, default=8)
     parser.add_argument('--n_enc_layers', type=int, default=12)
@@ -45,44 +48,32 @@ if __name__ == '__main__':
     parser.add_argument('--pf_dim', type=int, default=768*4)
     parser.add_argument('--dropout', type=float, default=0.1)
     
-    parser.add_argument('--lr', type=float, default=5e-5)
+    parser.add_argument('--lr', type=float, default=1e-5)
     parser.add_argument('--beta1', type=float, default=0.9)
     parser.add_argument('--beta2', type=float, default=0.98)
     parser.add_argument('--eps', type=float, default=1e-9)
     parser.add_argument('--warmup_ratio', type=float, default=0.1)
-    parser.add_argument('--clip', type=int, default=5)
+    parser.add_argument('--clip', type=int, default=1)
     
-    parser.add_argument('--epochs', type=int)
     parser.add_argument('--beam_size', type=int, default=3)
     parser.add_argument('--beam_testbatch_1', type=str2bool, default='false')
-    parser.add_argument('--curriculum', type=str2bool, default='false')
-    parser.add_argument('--test', type=str2bool, default='true')
     
     
     print('========== Loading All Parse Arguments\n')
     args = parser.parse_args()
     init_seed(args.seed)
-    print(args.dataparallel)
+
     
     print('========== Loading Tokenizer\n')
     if args.with_pretrained:
         tokenizer = get_pretrained_tokenizer(args.model_path)
         pad_num = tokenizer('[PAD]', add_special_tokens=False)['input_ids'][0]
+        
         args.vocab_size = tokenizer.vocab_size
     else:
         tokenizer = SPTokenizer(args)
-        pad_num = 2
-        
-        
-    print('========== Loading Model\n')
-    if args.with_pretrained:
-        pretrained_model = get_pretrained_model(args.model_path)
-    else:
-        pretrained_model = None
-
-    model = MultiTaskLearner(args, pretrained_model)
-    model.init_decoder()
-    
+        pad_num = tokenizer.pad_num
+            
     
     print('========== Loading Dataset & DataLoader\n')
     train_data = load_json_data(args.data_path+'train.json')
@@ -106,6 +97,16 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size,
                              sampler=RandomSampler(test_dataset), num_workers=args.num_workers)
     
+
+    print('========== Loading Model\n')
+    if args.with_pretrained:
+        pretrained_model = get_pretrained_model(args.model_path)
+    else:
+        pretrained_model = None
+
+    model = MultiTaskLearner(args, pretrained_model, pad_num)
+    model.init_decoder()
+
     
     print('========== Setting Optimizer & Scheduler\n')
     t_total = len(train_loader) * args.epochs
