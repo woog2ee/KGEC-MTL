@@ -29,10 +29,12 @@ def load_json_data(data_path):
 
 
 def get_optimizer_and_scheduler(model, lr, beta1, beta2, eps, warmup_steps, t_total):
-    no_decay = ['bias', 'LayerNorm.weight']
+    no_decay = ['bias', 'LayerNorm.weight', 'LayerNorm.bias']
     optimizer_grouped_parameters = [
-        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
-        {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
+        {'params': [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+         'weight_decay': 0.0001},
+        {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+         'weight_decay': 0.0}
     ]
     
     optimizer = Adam(optimizer_grouped_parameters, lr=lr, betas=(beta1, beta2), eps=eps)

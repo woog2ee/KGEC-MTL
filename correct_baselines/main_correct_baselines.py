@@ -27,6 +27,7 @@ if __name__ == '__main__':
 
     parser.add_argument('--batch_size', type=int)
     parser.add_argument('--epochs', type=int)
+    parser.add_argument('--lr', type=float)
     parser.add_argument('--curriculum', type=str2bool, default='false')
     parser.add_argument('--test', type=str2bool, default='false')
 
@@ -40,7 +41,6 @@ if __name__ == '__main__':
     parser.add_argument('--pf_dim', type=int, default=768*4)
     parser.add_argument('--dropout', type=float, default=0.1)
     
-    parser.add_argument('--lr', type=float, default=1e-5)
     parser.add_argument('--beta1', type=float, default=0.9)
     parser.add_argument('--beta2', type=float, default=0.98)
     parser.add_argument('--eps', type=float, default=1e-9)
@@ -86,6 +86,7 @@ if __name__ == '__main__':
     t_total = len(train_loader) * args.epochs
     warmup_steps = int(t_total) * args.warmup_ratio
     optimizer, scheduler = get_optimizer_and_scheduler(model, args.lr, args.beta1, args.beta2, args.eps, warmup_steps, t_total)
+    #optimizer, _ = get_optimizer_and_scheduler(model, args.lr, args.beta1, args.beta2, args.eps, warmup_steps, t_total)
     
     
     print('========== Training & Testing Start\n')

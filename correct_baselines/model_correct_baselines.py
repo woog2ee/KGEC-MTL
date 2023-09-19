@@ -85,8 +85,8 @@ def generate_square_subsequent_mask(size, device):
 
 
 def create_mask(src, tgt, args):
-    assert src.shape[1] == args.max_tokens_per_sent
-    assert tgt.shape[1] == args.max_tokens_per_sent
+    #assert src.shape[1] == args.max_tokens_per_sent
+    #assert tgt.shape[1] == args.max_tokens_per_sent
 
     src_seq_len = src.shape[1]
     src_mask    = torch.zeros((src_seq_len, src_seq_len), device=args.device).type(torch.bool)
@@ -94,8 +94,7 @@ def create_mask(src, tgt, args):
     tgt_seq_len = tgt.shape[1]
     tgt_mask    = generate_square_subsequent_mask(tgt_seq_len, args.device)
 
-    pad_idx = 2
-
+    pad_idx = 2  # sentencepiece tokenizer's pad id
     src_padding_mask = (src == pad_idx)
     tgt_padding_mask = (tgt == pad_idx)
     return src_mask, tgt_mask, src_padding_mask, tgt_padding_mask

@@ -28,9 +28,12 @@ if __name__ == '__main__':
     
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--num_workers', type=int, default=10)
+    parser.add_argument('--max_tokens_per_sent', type=int, default=64)
+    parser.add_argument('--curriculum', type=str2bool, default='false')
 
     parser.add_argument('--batch_size', type=int)
-    parser.add_argument('--beam_size', type=int, default=3)
+    parser.add_argument('--beam_size', type=int)
+    parser.add_argument('--inference', type=str, choices=['greedy', 'beam'])
     
 
     print('========== Loading All Parse Arguments\n')
@@ -63,11 +66,19 @@ if __name__ == '__main__':
         return array
     valid_epoch_loss = preprocess_result(valid_epoch_loss)
     best_epoch = valid_epoch_loss.index(min(valid_epoch_loss))
-
-
+    
+    print(f'test with best_epoch {best_epoch+1}\n')
+    
     print(f'========== Loading Test Dataset & DataLoader\n')
-    test_dataset = load_json_data(args.data_path+'test.json')
+    test_data = load_json_data(args.data_path+'test.json')
+    #test_data = test_data[:60]
+    test_dataset = TransformerDataset(args, test_data, tokenizer)
     test_loader = build_data_loader(test_dataset, args, 'test')
 
-    test_word_metrics, test_char_metrics = predict(args, tokenizer, best_epoch, test_dataset)
-    predict_beam1(args, tokenizer, best_epoch, test_loader)
+    if args.inference == 'greedy':
+        test_word_metrics, test_char_metrics = predict(args, tokenizer, best_epoch, test_dataset)
+    elif args.inference == 'beam':
+        test_word_metrics, test_char_metrics = predict_beam1(args, tokenizer, best_epoch, test_loader)
+
+    print(f'word_metrics: {test_word_metrics}')
+    print(f'char_metrics: {test_char_metrics}')
